@@ -1,0 +1,21 @@
+[run]
+branch = True
+source = sd_train
+omit =
+    sd_train/ui/*
+    sd_train/infra/environment/*
+    sd_train/__main__.py
+    sd_train/cli.py
+
+[report]
+show_missing = True
+skip_covered = True
+skip_empty = True
+precision = 1
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
+    raise NotImplementedError
+
+[html]
+directory = .coverage_html

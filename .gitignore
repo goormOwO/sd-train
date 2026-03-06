@@ -1,0 +1,31 @@
+# Training
+/train
+/images
+/outputs
+/data
+/docs
+*.safetensors
+*.zip
+*.tar
+/.cache
+
+# Python
+/.venv
+__pycache__
+*.py[cod]
+.coverage
+.coverage.*
+coverage.xml
+/.pytest_cache
+/.mypy_cache
+/.pyright
+*.egg-info
+/build
+/dist
+
+# Config
+/config.toml
+/train.toml
+
+# OS
+.DS_Store
