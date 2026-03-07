@@ -7,7 +7,12 @@ from pydantic import ValidationError
 from sd_train.core.dataset_detection import guess_dataset_dir_from_train_config
 from sd_train.core.script_selection import scan_train_scripts
 from sd_train.app.start import start_training
-from sd_train.config.models import AppConfig, DEFAULT_VASTAI_OFFER_QUERY, LastSelection
+from sd_train.config.models import (
+    AppConfig,
+    DEFAULT_VASTAI_OFFER_QUERY,
+    LastSelection,
+    normalize_app_config,
+)
 from sd_train.config.store import load_config, save_config
 from sd_train.ui.apps.launcher import TaggerWorkspaceApp, TrainLauncherApp
 
@@ -16,7 +21,7 @@ CONFIG_PATH = Path("config.toml")
 
 def main() -> None:
     colorama_init()
-    config: AppConfig = load_config(CONFIG_PATH)
+    config: AppConfig = normalize_app_config(load_config(CONFIG_PATH))
 
     script_options, scan_error = scan_train_scripts()
     if scan_error is not None:
@@ -44,6 +49,7 @@ def main() -> None:
             if not config.last.train_script and script_options:
                 preferred = "train_network.py"
                 config.last.train_script = preferred if preferred in script_options else script_options[0]
+            normalize_app_config(config)
             save_config(CONFIG_PATH, config)
 
             if result.action == "start":
@@ -68,6 +74,7 @@ def main() -> None:
                     config.tagger.model = workspace_result.model
                     config.tagger.threshold = workspace_result.threshold
                     config.tagger.batch = workspace_result.batch
+                    normalize_app_config(config)
                     save_config(CONFIG_PATH, config)
                     if workspace_result.action == "quit":
                         return
@@ -82,4 +89,5 @@ def main() -> None:
     except Exception as exc:
         print(f"{Fore.RED}Error: {exc}{Style.RESET_ALL}")
     finally:
+        normalize_app_config(config)
         save_config(CONFIG_PATH, config)

@@ -6,7 +6,7 @@ This document contains development, implementation, and operator-facing details 
 
 `sd-train` is a Textual TUI launcher for SDXL/LoRA training workflows on remote machines, with:
 
-- SSH and Vast.ai environment support
+- Local, SSH, and Vast.ai environment support
 - remote `kohya-ss/sd-scripts` execution
 - automatic artifact sync via `rclone`
 - built-in dataset tagging tools
@@ -70,7 +70,7 @@ Configuration is stored in `config.toml`.
 
 Top-level sections:
 
-- `[[environments]]`: SSH or Vast.ai environments
+- `[[environments]]`: built-in local environment plus SSH or Vast.ai environments
 - `[last]`: last selected environment/config/script
 - `[tagger]`: tagger defaults
 - `[other_options]`: global auth options used by all environments
@@ -85,7 +85,7 @@ civitai_api_key = ""
 
 ## Launcher Flow
 
-1. Select or create an environment.
+1. Select the built-in local environment or create a remote environment.
 2. Select `train.toml`.
 3. Select a training script.
 4. Configure auth in `Other Options` if needed.

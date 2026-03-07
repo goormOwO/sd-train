@@ -143,3 +143,28 @@ def test_start_training_success_path(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     monkeypatch.setattr(app_start.asyncio, "run", _fake_asyncio_run)
     assert app_start.start_training(cfg, result, ["train_network.py"]) is True
     assert called["n"] == 1
+
+
+def test_start_training_success_path_for_builtin_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    train_cfg = tmp_path / "train.toml"
+    train_cfg.write_text("x=1", encoding="utf-8")
+    cfg = AppConfig(other_options={"hf_token": "", "civitai_api_key": ""})
+    selection = SimpleNamespace(
+        train_script="train_network.py",
+        train_config_path=str(train_cfg),
+        environment_name="local",
+    )
+    result = SimpleNamespace(selection=selection)
+
+    monkeypatch.setattr(app_start, "run_preflight_gate", lambda *_args: object())
+    monkeypatch.setattr(app_start, "build_environment", lambda _cfg: object())
+    monkeypatch.setattr(app_start, "run_training_session", lambda *_args: None)
+    called = {"n": 0}
+
+    def _fake_asyncio_run(_coroutine):  # noqa: ANN001
+        called["n"] += 1
+        return None
+
+    monkeypatch.setattr(app_start.asyncio, "run", _fake_asyncio_run)
+    assert app_start.start_training(cfg, result, ["train_network.py"]) is True
+    assert called["n"] == 1

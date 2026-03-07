@@ -2,11 +2,11 @@
 
 [English](README.md) | [한국어](README.ko.md)
 
-`sd-train`은 원격 머신에서 SDXL/LoRA 학습 작업을 실행하기 위한 터미널 UI입니다. 학습 환경을 선택하고, 실행 전 설정을 검증하고, 원격에서 `kohya-ss/sd-scripts` 기반 학습을 시작한 뒤, 결과물을 로컬로 동기화할 수 있습니다.
+`sd-train`은 로컬 또는 원격 머신에서 SDXL/LoRA 학습 작업을 실행하기 위한 터미널 UI입니다. 학습 환경을 선택하고, 실행 전 설정을 검증하고, `kohya-ss/sd-scripts` 기반 학습을 시작한 뒤, 결과물을 로컬로 동기화할 수 있습니다.
 
 ## 할 수 있는 일
 
-- SSH 서버 또는 Vast.ai 인스턴스에서 학습 실행
+- 로컬 머신, SSH 서버 또는 Vast.ai 인스턴스에서 학습 실행
 - 런처에서 `train.toml` 선택
 - `kohya-ss/sd-scripts`의 학습 스크립트 선택
 - Hugging Face 또는 CivitAI에서 모델/데이터셋 자산 내려받기
@@ -18,12 +18,12 @@
 - Python 3.12+
 - `uv`
 - 로컬 `rclone`
-- 원격 환경에 다음 도구 필요:
+- 원격 환경을 사용할 경우 다음 도구 필요:
   - `python3`
   - `rclone`
   - `git`
 
-학습 시작 시 원격의 `~/.sd-train/sd-scripts`는 자동으로 준비됩니다. 원격에 `uv`가 없으면 자동 설치를 시도합니다.
+학습 시작 시 선택한 머신의 `~/.sd-train/sd-scripts`는 자동으로 준비됩니다. `uv`가 없으면 자동 설치를 시도합니다.
 
 ## 설치
 
@@ -48,7 +48,7 @@ uv run -m sd_train.cli
 ## 빠른 시작
 
 1. `uv run launch`를 실행합니다.
-2. 환경을 만들거나 기존 환경을 선택합니다.
+2. 내장 `local` 환경을 선택하거나 원격 환경을 만듭니다.
 3. `train.toml`을 선택합니다.
 4. 학습 스크립트를 선택합니다.
 5. Hugging Face 토큰이나 CivitAI API 키가 필요하면 `Other Options`를 엽니다.

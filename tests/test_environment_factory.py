@@ -1,6 +1,13 @@
 from sd_train.core import environment_setup
 from sd_train.core.environment_setup import build_environment, env_to_model
+from sd_train.infra.environment.local_env import LocalEnvironment
 from sd_train.infra.environment.ssh_env import SSH
+
+
+def test_build_environment_for_local() -> None:
+    model = env_to_model({"name": "local", "type": "local"})
+    env = build_environment(model)
+    assert isinstance(env, LocalEnvironment)
 
 
 def test_build_environment_for_ssh() -> None:

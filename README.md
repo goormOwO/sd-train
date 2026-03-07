@@ -2,11 +2,11 @@
 
 [English](README.md) | [한국어](README.ko.md)
 
-`sd-train` is a terminal UI for running SDXL/LoRA training jobs on remote machines. It helps you pick a training environment, validate your config before launch, start a `kohya-ss/sd-scripts` job remotely, and sync outputs back to your local machine.
+`sd-train` is a terminal UI for running SDXL/LoRA training jobs on local or remote machines. It helps you pick a training environment, validate your config before launch, start a `kohya-ss/sd-scripts` job, and sync outputs back to your local machine.
 
 ## What You Can Do
 
-- Run training on an SSH server or a Vast.ai instance
+- Run training on your local machine, an SSH server, or a Vast.ai instance
 - Select a `train.toml` file from the launcher
 - Choose a training script from `kohya-ss/sd-scripts`
 - Download model or dataset assets from Hugging Face or CivitAI
@@ -18,12 +18,12 @@
 - Python 3.12+
 - `uv`
 - Local `rclone`
-- A remote environment with:
+- For remote environments:
   - `python3`
   - `rclone`
   - `git`
 
-`sd-train` prepares `~/.sd-train/sd-scripts` on the remote automatically when training starts. If `uv` is missing on the remote, it also tries to install it automatically.
+`sd-train` prepares `~/.sd-train/sd-scripts` automatically when training starts. If `uv` is missing on the selected machine, it also tries to install it automatically.
 
 ## Install
 
@@ -48,7 +48,7 @@ On first launch, `config.toml` is created automatically in the project root.
 ## Quick Start
 
 1. Run `uv run launch`.
-2. Create or select an environment.
+2. Select the built-in `local` environment or create/select a remote environment.
 3. Choose your `train.toml`.
 4. Choose the training script.
 5. Open `Other Options` if you need a Hugging Face token or CivitAI API key.

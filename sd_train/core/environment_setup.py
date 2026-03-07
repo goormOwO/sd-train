@@ -1,18 +1,29 @@
 from typing import Any
 
-from sd_train.config.models import EnvironmentConfig, SSHEnvironmentConfig, VastAIEnvironmentConfig
+from sd_train.config.models import (
+    EnvironmentConfig,
+    LocalEnvironmentConfig,
+    SSHEnvironmentConfig,
+    VastAIEnvironmentConfig,
+)
 from sd_train.infra.environment.base import Environment
+from sd_train.infra.environment.local_env import LocalEnvironment
 from sd_train.infra.environment.ssh_env import SSH
 from sd_train.infra.environment.vastai_env import VastAIClient, VastAIConfig
 
 
 def env_to_model(raw: dict[str, Any]) -> EnvironmentConfig:
-    if str(raw.get("type", "ssh")).lower() == "vastai":
+    env_type = str(raw.get("type", "ssh")).lower()
+    if env_type == "local":
+        return LocalEnvironmentConfig(**raw)
+    if env_type == "vastai":
         return VastAIEnvironmentConfig(**raw)
     return SSHEnvironmentConfig(**raw)
 
 
 def build_environment(config: EnvironmentConfig) -> Environment:
+    if isinstance(config, LocalEnvironmentConfig):
+        return LocalEnvironment()
     if isinstance(config, SSHEnvironmentConfig):
         return SSH(
             host=config.host,

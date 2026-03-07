@@ -14,6 +14,7 @@ from textual.widgets import Input, OptionList, ProgressBar, Static, TextArea
 from textual.widgets.option_list import Option
 from textual_autocomplete import DropdownItem, PathAutoComplete, TargetState
 
+from sd_train.config.models import DEFAULT_LOCAL_ENVIRONMENT_NAME
 from sd_train.tagger.core import (
     TaggerModelConfig,
     TaggerRunSummary,
@@ -624,6 +625,9 @@ class SelectEnvironmentScreen(ModalScreen[EnvironmentPickerResult]):
         self.default_offer_query = default_offer_query
         self._pending_delete_name: str | None = None
 
+    def _is_builtin_local_name(self, name: str) -> bool:
+        return name == DEFAULT_LOCAL_ENVIRONMENT_NAME
+
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
             yield Static("Select Environment")
@@ -699,13 +703,18 @@ class SelectEnvironmentScreen(ModalScreen[EnvironmentPickerResult]):
         option_id = self._selected_option_id()
         if option_id is None or not option_id.startswith("env:"):
             return
-        self._open_editor(is_new=False, name=option_id[4:])
+        name = option_id[4:]
+        if self._is_builtin_local_name(name):
+            return
+        self._open_editor(is_new=False, name=name)
 
     def action_delete_selected(self) -> None:
         option_id = self._selected_option_id()
         if option_id is None or not option_id.startswith("env:"):
             return
         name = option_id[4:]
+        if self._is_builtin_local_name(name):
+            return
         self._pending_delete_name = name
         self.app.push_screen(ConfirmDeleteScreen(name), self._on_confirm_delete)
 
@@ -752,7 +761,7 @@ class SelectEnvironmentScreen(ModalScreen[EnvironmentPickerResult]):
             return
         if result.get("__delete__") is True:
             name = str(result.get("name", "")).strip()
-            if not name:
+            if not name or self._is_builtin_local_name(name):
                 return
             self._pending_delete_name = name
             self.app.push_screen(ConfirmDeleteScreen(name), self._on_confirm_delete)
@@ -769,6 +778,9 @@ class SelectEnvironmentScreen(ModalScreen[EnvironmentPickerResult]):
                 break
         if not replaced:
             self.environments.append(result)
+        self.environments.sort(
+            key=lambda env: (0 if str(env.get("name", "")) == DEFAULT_LOCAL_ENVIRONMENT_NAME else 1, str(env.get("name", "")))
+        )
         self.selected = name
         self._render_options()
 
@@ -777,7 +789,7 @@ class SelectEnvironmentScreen(ModalScreen[EnvironmentPickerResult]):
             self._pending_delete_name = None
             return
         name = self._pending_delete_name or ""
-        if not name:
+        if not name or self._is_builtin_local_name(name):
             return
         self.environments = [
             env for env in self.environments if str(env.get("name", "")) != name
@@ -922,6 +934,11 @@ class EnvironmentEditScreen(ModalScreen[dict[str, Any] | None]):
         self.is_new = is_new
         self.default_offer_query = default_offer_query
 
+    def _is_builtin_local(self) -> bool:
+        return str(self.env.get("name", "")).strip() == DEFAULT_LOCAL_ENVIRONMENT_NAME or str(
+            self.env.get("type", "")
+        ).lower() == "local"
+
     def compose(self) -> ComposeResult:
         with Vertical(id="editor"):
             yield Static("Environment Editor: Enter to edit/select")
@@ -944,6 +961,8 @@ class EnvironmentEditScreen(ModalScreen[dict[str, Any] | None]):
 
     def _env_type(self) -> str:
         t = str(self.env.get("type", "ssh")).lower()
+        if t == "local":
+            return "local"
         return "vastai" if t == "vastai" else "ssh"
 
     def _render_items(self) -> None:
@@ -954,8 +973,11 @@ class EnvironmentEditScreen(ModalScreen[dict[str, Any] | None]):
         items.add_option(
             Option(_field_label("Name", str(self.env.get("name", ""))), id="field:name")
         )
-        items.add_option(Option(_field_label("Type", env_type), id="field:type"))
-        if env_type == "ssh":
+        if not self._is_builtin_local():
+            items.add_option(Option(_field_label("Type", env_type), id="field:type"))
+        if env_type == "local":
+            items.add_option(Option(_field_label("Mode", "Built-in local environment"), id="field:local_info"))
+        elif env_type == "ssh":
             items.add_option(
                 Option(
                     _field_label("SSH Host", str(self.env.get("host", ""))),
@@ -1016,7 +1038,8 @@ class EnvironmentEditScreen(ModalScreen[dict[str, Any] | None]):
             )
         items.add_option(Option(" ", id="divider:actions", disabled=True))
         items.add_option(Option(_start_label("Save"), id="action:save"))
-        items.add_option(Option(_danger_label("Delete"), id="danger:delete"))
+        if not self._is_builtin_local():
+            items.add_option(Option(_danger_label("Delete"), id="danger:delete"))
         items.add_option(Option(_action_label("Back"), id="action:back"))
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
@@ -1044,6 +1067,8 @@ class EnvironmentEditScreen(ModalScreen[dict[str, Any] | None]):
         if key == "action:back":
             self.dismiss(None)
             return
+        if key == "field:local_info":
+            return
         if key == "field:type":
             self.app.push_screen(
                 EnvironmentTypeScreen(self._env_type()), self._on_type_selected
@@ -1069,6 +1094,11 @@ class EnvironmentEditScreen(ModalScreen[dict[str, Any] | None]):
     def _normalized_env(self) -> dict[str, Any]:
         env_type = self._env_type()
         name = str(self.env.get("name", "")).strip()
+        if env_type == "local":
+            return {
+                "name": DEFAULT_LOCAL_ENVIRONMENT_NAME,
+                "type": "local",
+            }
         if env_type == "ssh":
             return {
                 "name": name,
@@ -1101,6 +1131,8 @@ class EnvironmentEditScreen(ModalScreen[dict[str, Any] | None]):
             "disk": "Edit VastAI Disk",
         }
         value = str(self.env.get(key, ""))
+        if self._is_builtin_local():
+            return
         if key == "identity_file":
             self.app.push_screen(
                 PathEditScreen(title_map.get(key, "Edit"), value),

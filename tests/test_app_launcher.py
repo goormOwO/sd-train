@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from pydantic import ValidationError
 
 from sd_train.app import launcher
-from sd_train.config.models import AppConfig
+from sd_train.config.models import AppConfig, DEFAULT_LOCAL_ENVIRONMENT_NAME
 
 
 def test_launcher_main_exits_when_dialog_returns_none(monkeypatch) -> None:
@@ -23,6 +23,7 @@ def test_launcher_main_exits_when_dialog_returns_none(monkeypatch) -> None:
     monkeypatch.setattr(launcher, "TrainLauncherApp", FakeLauncherApp)
     launcher.main()
     assert len(saved) == 1
+    assert saved[0].environments[0]["name"] == DEFAULT_LOCAL_ENVIRONMENT_NAME
 
 
 def test_launcher_main_start_action_calls_start_training(monkeypatch) -> None:

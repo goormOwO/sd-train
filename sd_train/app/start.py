@@ -5,7 +5,7 @@ from typing import Any
 from colorama import Fore, Style
 
 from sd_train.app.preflight import run_preflight_gate
-from sd_train.config.models import AppConfig
+from sd_train.config.models import AppConfig, normalize_app_config
 from sd_train.core.environment_setup import build_environment, env_to_model
 from sd_train.core.execution import run_training_session
 from sd_train.core.script_selection import normalize_script_path
@@ -13,7 +13,8 @@ from sd_train.core.source_auth import build_download_auth
 
 
 def _find_environment(config: AppConfig, name: str) -> dict[str, object]:
-    for environment in config.environments:
+    normalized = normalize_app_config(config)
+    for environment in normalized.environments:
         if str(environment.get("name", "")) == name:
             return environment
     raise ValueError(f"Selected environment not found: {name}")
