@@ -54,6 +54,57 @@ On first launch, `config.toml` is created automatically in the project root.
 5. Open `Other Options` if you need a Hugging Face token or CivitAI API key.
 6. Start training after the preflight check passes.
 
+## Using Hugging Face and CivitAI Models
+
+You can reference remote assets directly in `train.toml` instead of downloading them manually first. During preflight, `sd-train` validates the reference format and checks whether the remote asset is accessible.
+
+### Hugging Face
+
+Accepted forms:
+
+- `org/repo`
+- `model:org/repo`
+- `dataset:org/repo`
+- `model:org/repo@revision`
+- `model:org/repo::file.safetensors`
+- `model:org/repo@revision::file.safetensors`
+
+Examples:
+
+```toml
+pretrained_model_name_or_path = "model:stabilityai/stable-diffusion-xl-base-1.0"
+network_weights = "model:some-user/my-lora::my-lora.safetensors"
+dataset_config = "dataset:some-user/my-dataset"
+```
+
+Notes:
+
+- Use `::subpath` when a key expects a file such as `.safetensors`.
+- If the repo is private or gated, set your Hugging Face token in `Other Options`.
+- Bare `org/repo` is treated like a Hugging Face model reference.
+
+### CivitAI
+
+Accepted forms:
+
+- `civitai:46846`
+- `civitai:https://civitai.com/models/1234567?modelVersionId=46846`
+- `civitai:https://civitai.com/api/download/models/46846`
+- `civitai:46846::my-model.safetensors`
+
+Examples:
+
+```toml
+pretrained_model_name_or_path = "civitai:46846"
+network_weights = "civitai:46846::my-lora.safetensors"
+```
+
+Notes:
+
+- Set `civitai_api_key` in `Other Options` before using CivitAI downloads.
+- If you provide a model page URL, `sd-train` tries to resolve it to a downloadable version id automatically.
+- `::filename` is optional, but helps keep the downloaded file name predictable.
+
 ## Tagger Workspace
 
 From the launcher, you can open `Tagger Workspace` to:

@@ -54,6 +54,57 @@ uv run -m sd_train.cli
 5. Hugging Face 토큰이나 CivitAI API 키가 필요하면 `Other Options`를 엽니다.
 6. preflight 검사를 통과하면 학습을 시작합니다.
 
+## Hugging Face / CivitAI 모델 사용법
+
+모델 파일을 미리 직접 내려받지 않아도, `train.toml`에서 원격 자산을 직접 참조할 수 있습니다. `sd-train`은 preflight 단계에서 참조 형식을 검사하고 실제 접근 가능한지도 확인합니다.
+
+### Hugging Face
+
+사용 가능한 형식:
+
+- `org/repo`
+- `model:org/repo`
+- `dataset:org/repo`
+- `model:org/repo@revision`
+- `model:org/repo::file.safetensors`
+- `model:org/repo@revision::file.safetensors`
+
+예시:
+
+```toml
+pretrained_model_name_or_path = "model:stabilityai/stable-diffusion-xl-base-1.0"
+network_weights = "model:some-user/my-lora::my-lora.safetensors"
+dataset_config = "dataset:some-user/my-dataset"
+```
+
+참고:
+
+- `.safetensors` 같은 파일 경로가 필요한 키에는 `::subpath` 형식을 사용하세요.
+- 비공개 또는 gated 리포지토리라면 `Other Options`에 Hugging Face 토큰을 입력해야 합니다.
+- `org/repo`만 써도 Hugging Face 모델 참조로 처리됩니다.
+
+### CivitAI
+
+사용 가능한 형식:
+
+- `civitai:46846`
+- `civitai:https://civitai.com/models/1234567?modelVersionId=46846`
+- `civitai:https://civitai.com/api/download/models/46846`
+- `civitai:46846::my-model.safetensors`
+
+예시:
+
+```toml
+pretrained_model_name_or_path = "civitai:46846"
+network_weights = "civitai:46846::my-lora.safetensors"
+```
+
+참고:
+
+- CivitAI 다운로드를 쓰려면 `Other Options`에 `civitai_api_key`를 설정해야 합니다.
+- 모델 페이지 URL을 넣으면 `sd-train`이 내려받기 가능한 version id로 자동 해석을 시도합니다.
+- `::filename`은 선택 사항이지만, 저장 파일명을 고정하고 싶을 때 유용합니다.
+
 ## 태거 워크스페이스
 
 런처에서 `Tagger Workspace`를 열면 다음 작업을 할 수 있습니다.
