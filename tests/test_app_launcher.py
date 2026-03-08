@@ -149,3 +149,54 @@ def test_launcher_main_handles_validation_error(monkeypatch) -> None:
 
     monkeypatch.setattr(launcher, "start_training", _raise_validation)
     launcher.main()
+
+
+def test_run_last_training_calls_start_training_with_saved_selection(monkeypatch, tmp_path) -> None:
+    calls = {"start": 0}
+    saved: list[AppConfig] = []
+    config = AppConfig()
+    config.last.environment_name = "local"
+    config.last.train_config_path = str(tmp_path / "train.toml")
+    config.last.train_script = "train_network.py"
+
+    monkeypatch.setattr(launcher, "colorama_init", lambda: None)
+    monkeypatch.setattr(launcher, "load_config", lambda _p: config)
+    monkeypatch.setattr(launcher, "save_config", lambda _p, cfg: saved.append(cfg.model_copy(deep=True)))
+    monkeypatch.setattr(launcher, "scan_train_scripts", lambda: (["train_network.py"], None))
+
+    def _fake_start(cfg, result, script_options, require_confirmation=True):  # noqa: ANN001
+        calls["start"] += 1
+        assert cfg.last.environment_name == "local"
+        assert result.selection.environment_name == "local"
+        assert result.selection.train_config_path == str(tmp_path / "train.toml")
+        assert result.selection.train_script == "train_network.py"
+        assert script_options == ["train_network.py"]
+        assert require_confirmation is False
+        return True
+
+    monkeypatch.setattr(launcher, "start_training", _fake_start)
+    assert launcher.run_last_training() is True
+    assert calls["start"] == 1
+    assert len(saved) == 2
+
+
+def test_run_last_training_fills_default_script_when_missing(monkeypatch, tmp_path) -> None:
+    config = AppConfig()
+    config.last.environment_name = "local"
+    config.last.train_config_path = str(tmp_path / "train.toml")
+    saved: list[AppConfig] = []
+
+    monkeypatch.setattr(launcher, "colorama_init", lambda: None)
+    monkeypatch.setattr(launcher, "load_config", lambda _p: config)
+    monkeypatch.setattr(launcher, "save_config", lambda _p, cfg: saved.append(cfg.model_copy(deep=True)))
+    monkeypatch.setattr(launcher, "scan_train_scripts", lambda: (["foo.py", "train_network.py"], None))
+
+    def _fake_start(cfg, result, _script_options, require_confirmation=True):  # noqa: ANN001
+        assert cfg.last.train_script == "train_network.py"
+        assert result.selection.train_script == "train_network.py"
+        assert require_confirmation is False
+        return True
+
+    monkeypatch.setattr(launcher, "start_training", _fake_start)
+    assert launcher.run_last_training() is True
+    assert saved[0].last.train_script == "train_network.py"

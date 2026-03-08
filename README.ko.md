@@ -43,6 +43,12 @@ uv run launch
 uv run -m sd_train.cli
 ```
 
+런처에 저장된 마지막 설정으로 바로 학습을 시작하려면:
+
+```bash
+uv run launch last
+```
+
 첫 실행 시 프로젝트 루트에 `config.toml`이 자동 생성됩니다.
 
 ## 빠른 시작

@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 from colorama import Fore, Style
 from colorama import init as colorama_init
@@ -17,6 +18,36 @@ from sd_train.config.store import load_config, save_config
 from sd_train.ui.apps.launcher import TaggerWorkspaceApp, TrainLauncherApp
 
 CONFIG_PATH = Path("config.toml")
+
+
+def run_last_training() -> bool:
+    colorama_init()
+    config: AppConfig = normalize_app_config(load_config(CONFIG_PATH))
+
+    script_options, scan_error = scan_train_scripts()
+    if scan_error is not None:
+        print(f"{Fore.YELLOW}{scan_error}{Style.RESET_ALL}")
+
+    if not config.last.train_script and script_options:
+        preferred = "train_network.py"
+        config.last.train_script = preferred if preferred in script_options else script_options[0]
+
+    normalize_app_config(config)
+    save_config(CONFIG_PATH, config)
+
+    result = SimpleNamespace(
+        action="start",
+        selection=SimpleNamespace(
+            environment_name=config.last.environment_name,
+            train_config_path=config.last.train_config_path or "train.toml",
+            train_script=config.last.train_script,
+        ),
+    )
+
+    started = start_training(config, result, script_options, require_confirmation=False)
+    normalize_app_config(config)
+    save_config(CONFIG_PATH, config)
+    return started
 
 
 def main() -> None:

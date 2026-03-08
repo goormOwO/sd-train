@@ -49,6 +49,30 @@ def test_run_preflight_gate_returns_result_when_user_proceeds(
     assert result.report is report
 
 
+def test_run_preflight_or_raise_returns_result_without_ui(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    report = SimpleNamespace()
+    checks: list = []
+    monkeypatch.setattr(app_preflight, "run_preflight_checks", lambda *_args: (report, checks))
+    monkeypatch.setattr(app_preflight, "build_external_ref_failure_message", lambda _checks: "")
+    result = app_preflight.run_preflight_or_raise(tmp_path / "train.toml", "train_network.py", DownloadAuth())
+    assert result.report is report
+    assert result.checks is checks
+
+
+def test_run_preflight_or_raise_raises_on_external_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    report = SimpleNamespace()
+    checks = [SimpleNamespace(ok=False, provider="hf", key="x", ref="y", detail="denied")]
+    monkeypatch.setattr(app_preflight, "run_preflight_checks", lambda *_args: (report, checks))
+    monkeypatch.setattr(
+        app_preflight,
+        "build_external_ref_failure_message",
+        lambda _checks: "External reference check failed:\n- [hf] x: y\n  denied",
+    )
+
+    with pytest.raises(RuntimeError, match="External reference check failed"):
+        app_preflight.run_preflight_or_raise(tmp_path / "train.toml", "train_network.py", DownloadAuth())
+
+
 def test_start_training_returns_false_without_selection() -> None:
     config = AppConfig()
     result = SimpleNamespace(selection=None)
@@ -168,3 +192,31 @@ def test_start_training_success_path_for_builtin_local(monkeypatch: pytest.Monke
     monkeypatch.setattr(app_start.asyncio, "run", _fake_asyncio_run)
     assert app_start.start_training(cfg, result, ["train_network.py"]) is True
     assert called["n"] == 1
+
+
+def test_start_training_non_interactive_bypasses_confirmation_ui(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    train_cfg = tmp_path / "train.toml"
+    train_cfg.write_text("x=1", encoding="utf-8")
+    cfg = AppConfig(other_options={"hf_token": "", "civitai_api_key": ""})
+    selection = SimpleNamespace(
+        train_script="train_network.py",
+        train_config_path=str(train_cfg),
+        environment_name="local",
+    )
+    result = SimpleNamespace(selection=selection)
+    calls = {"gate": 0, "raise": 0}
+
+    monkeypatch.setattr(app_start, "run_preflight_gate", lambda *_args: calls.__setitem__("gate", calls["gate"] + 1))
+    monkeypatch.setattr(
+        app_start,
+        "run_preflight_or_raise",
+        lambda *_args: calls.__setitem__("raise", calls["raise"] + 1) or object(),
+    )
+    monkeypatch.setattr(app_start, "build_environment", lambda _cfg: object())
+    monkeypatch.setattr(app_start, "run_training_session", lambda *_args: None)
+    monkeypatch.setattr(app_start.asyncio, "run", lambda _coroutine: None)
+
+    assert app_start.start_training(cfg, result, ["train_network.py"], require_confirmation=False) is True
+    assert calls == {"gate": 0, "raise": 1}

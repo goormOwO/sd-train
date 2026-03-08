@@ -43,6 +43,12 @@ You can also run:
 uv run -m sd_train.cli
 ```
 
+To start training immediately with the last saved launcher settings:
+
+```bash
+uv run launch last
+```
+
 On first launch, `config.toml` is created automatically in the project root.
 
 ## Quick Start

@@ -128,9 +128,10 @@ class SSH(Environment):
                 try:
                     kwargs = {
                         "port": self._resolved.port,
-                        "username": self._resolved.user,
                         "known_hosts": None,
                     }
+                    if self._resolved.user is not None:
+                        kwargs["username"] = self._resolved.user
                     if client_keys is not None:
                         kwargs["client_keys"] = client_keys
                     self._conn = await asyncssh.connect(self._resolved.host, **kwargs)

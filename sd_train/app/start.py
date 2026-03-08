@@ -5,6 +5,7 @@ from typing import Any
 from colorama import Fore, Style
 
 from sd_train.app.preflight import run_preflight_gate
+from sd_train.app.preflight import run_preflight_or_raise
 from sd_train.config.models import AppConfig, normalize_app_config
 from sd_train.core.environment_setup import build_environment, env_to_model
 from sd_train.core.execution import run_training_session
@@ -24,6 +25,7 @@ def start_training(
     config: AppConfig,
     result: Any,
     script_options: list[str],
+    require_confirmation: bool = True,
 ) -> bool:
     if result.selection is None:
         return False
@@ -37,9 +39,12 @@ def start_training(
         raise ValueError(f"Train config file not found: {local_train_config_path}")
 
     auth = build_download_auth(config.other_options)
-    gate = run_preflight_gate(local_train_config_path, script, auth)
-    if gate is None:
-        return False
+    if require_confirmation:
+        gate = run_preflight_gate(local_train_config_path, script, auth)
+        if gate is None:
+            return False
+    else:
+        run_preflight_or_raise(local_train_config_path, script, auth)
 
     env_raw = _find_environment(config, result.selection.environment_name)
     env_model = env_to_model(env_raw)
