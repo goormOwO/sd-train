@@ -1,4 +1,5 @@
 import asyncio
+import json
 from pathlib import Path
 from typing import TextIO
 from types import SimpleNamespace
@@ -536,6 +537,181 @@ def test_resolve_and_patch_train_toml_materializes_explicit_hf_ref_for_unknown_k
 
     rendered = toml.loads(captured["text"])
     assert rendered["custom_text_encoder"] == "/home/ubuntu/.sd-train/artifacts/models/h/encoder.safetensors"
+
+
+def test_resolve_and_patch_train_toml_rewrites_nested_dataset_config_paths_toml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env = _FakeEnvironment()
+    captured_syncs: list[tuple[str, str]] = []
+    dataset_dir = tmp_path / "data"
+    dataset_dir.mkdir()
+    metadata_file = tmp_path / "meta.json"
+    metadata_file.write_text("{}", encoding="utf-8")
+    dataset_config = tmp_path / "dataset.toml"
+    dataset_config.write_text(
+        toml.dumps(
+            {
+                "datasets": [
+                    {
+                        "subsets": [
+                            {
+                                "image_dir": "./data",
+                                "metadata_file": "./meta.json",
+                            }
+                        ]
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    train_file = tmp_path / "train.toml"
+    train_file.write_text(
+        toml.dumps(
+            {
+                "pretrained_model_name_or_path": "model:org/repo::x.safetensors",
+                "dataset_config": "./dataset.toml",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    async def _fake_hf(*_args, **_kwargs):  # noqa: ANN002, ANN003
+        return MaterializedRef(
+            sync_path="~/.sd-train/artifacts/models/h/model.safetensors",
+            abs_path="/home/ubuntu/.sd-train/artifacts/models/h/model.safetensors",
+        )
+
+    async def _fake_upload(_env, key, local_path, _remote_root_sync, _remote_home):  # noqa: ANN001
+        if key == "train_data_dir":
+            return MaterializedRef(
+                sync_path="~/.sd-train/artifacts/datasets/hash/data",
+                abs_path="/home/ubuntu/.sd-train/artifacts/datasets/hash/data",
+            )
+        if key == "in_json":
+            return MaterializedRef(
+                sync_path="~/.sd-train/artifacts/configs/hash/meta.json",
+                abs_path="/home/ubuntu/.sd-train/artifacts/configs/hash/meta.json",
+            )
+        if key == "dataset_config":
+            return MaterializedRef(
+                sync_path="~/.sd-train/artifacts/configs/hash/dataset.toml",
+                abs_path="/home/ubuntu/.sd-train/artifacts/configs/hash/dataset.toml",
+            )
+        raise AssertionError(f"unexpected upload key: {key} ({local_path})")
+
+    def _capture_sync(src: str, dst: str) -> None:
+        captured_syncs.append((Path(src).read_text(encoding="utf-8"), dst))
+        env.sync_from_local_calls.append((src, dst))
+
+    monkeypatch.setattr(execution, "_materialize_hf_ref", _fake_hf)
+    monkeypatch.setattr(execution, "_upload_local_ref", _fake_upload)
+    monkeypatch.setattr(env, "sync_from_local", _capture_sync)
+
+    asyncio.run(
+        execution._resolve_and_patch_train_toml(
+            env,
+            train_file,
+            "~/.sd-train/runs/run-1",
+            "/home/ubuntu",
+            DownloadAuth(),
+        )
+    )
+
+    assert len(captured_syncs) == 1
+    rendered_train, _dst = captured_syncs[0]
+    rendered = toml.loads(rendered_train)
+    assert rendered["dataset_config"] == "/home/ubuntu/.sd-train/artifacts/configs/hash/dataset.toml"
+
+
+def test_materialize_dataset_config_rewrites_nested_paths_for_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env = _FakeEnvironment()
+    captured: dict[str, str] = {}
+    dataset_dir = tmp_path / "images"
+    dataset_dir.mkdir()
+    metadata_file = tmp_path / "metadata.json"
+    metadata_file.write_text("{}", encoding="utf-8")
+    dataset_config = tmp_path / "dataset.json"
+    dataset_config.write_text(
+        json.dumps(
+            {
+                "datasets": [
+                    {
+                        "subsets": [
+                            {
+                                "image_dir": "./images",
+                                "metadata_file": "./metadata.json",
+                            }
+                        ]
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    async def _fake_upload(_env, key, local_path, _remote_root_sync, _remote_home):  # noqa: ANN001
+        if key == "train_data_dir":
+            return MaterializedRef("~/.sd-train/artifacts/datasets/hash/images", "/remote/images")
+        if key == "in_json":
+            return MaterializedRef("~/.sd-train/artifacts/configs/hash/metadata.json", "/remote/metadata.json")
+        if key == "dataset_config":
+            captured["text"] = Path(local_path).read_text(encoding="utf-8")
+            return MaterializedRef("~/.sd-train/artifacts/configs/hash/dataset.json", "/remote/dataset.json")
+        raise AssertionError(f"unexpected upload key: {key}")
+
+    monkeypatch.setattr(execution, "_upload_local_ref", _fake_upload)
+
+    materialized = asyncio.run(
+        execution._materialize_dataset_config(
+            env,
+            dataset_config,
+            "~/.sd-train",
+            "/home/ubuntu",
+        )
+    )
+
+    rendered = json.loads(captured["text"])
+    subset = rendered["datasets"][0]["subsets"][0]
+    assert subset["image_dir"] == "/remote/images"
+    assert subset["metadata_file"] == "/remote/metadata.json"
+    assert materialized.remote.abs_path == "/remote/dataset.json"
+
+
+def test_materialize_dataset_config_raises_for_missing_nested_path(
+    tmp_path: Path,
+) -> None:
+    env = _FakeEnvironment()
+    dataset_config = tmp_path / "dataset.toml"
+    dataset_config.write_text(
+        toml.dumps(
+            {
+                "datasets": [
+                    {
+                        "subsets": [
+                            {
+                                "image_dir": "./missing-data",
+                            }
+                        ]
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="subset.image_dir is not a directory"):
+        asyncio.run(
+            execution._materialize_dataset_config(
+                env,
+                dataset_config,
+                "~/.sd-train",
+                "/home/ubuntu",
+            )
+        )
 
 
 def test_run_training_session_requires_file_server() -> None:

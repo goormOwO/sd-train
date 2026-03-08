@@ -18,6 +18,7 @@ from sd_train.domain.path_rules import (
     expected_hf_mode_for_key,
     expected_local_mode_for_key,
     is_path_value_key,
+    resolve_path_from_config,
     sanitize_component,
     to_abs_remote,
     to_sync_remote,
@@ -48,6 +49,12 @@ UV_INSTALL_URL = "https://astral.sh/uv/install.sh"
 class MaterializedRef:
     sync_path: str
     abs_path: str
+
+
+@dataclass
+class MaterializedConfig:
+    payload: dict[str, Any]
+    remote: MaterializedRef
 
 
 def _mask_secret(value: str) -> str:
@@ -262,6 +269,24 @@ def _github_raw_url(repo: str, commit: str, path: str) -> str:
     return f"https://raw.githubusercontent.com/{repo}/{commit}/{path}"
 
 
+def _load_structured_config(config_path: Path) -> dict[str, Any]:
+    suffix = config_path.suffix.lower()
+    if suffix == ".json":
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+    else:
+        payload = toml.load(config_path)
+    if not isinstance(payload, dict):
+        raise ValueError(f"Structured config must decode to a table/object: {config_path}")
+    return payload
+
+
+def _render_structured_config(config_path: Path, payload: dict[str, Any]) -> str:
+    suffix = config_path.suffix.lower()
+    if suffix == ".json":
+        return json.dumps(payload, ensure_ascii=True, indent=2) + "\n"
+    return toml.dumps(payload)
+
+
 async def _ensure_remote_exists(environment: Environment, abs_path: str) -> bool:
     result = await environment.run(f"[ -e {shlex.quote(abs_path)} ]")
     return result.code == 0
@@ -471,6 +496,81 @@ async def _materialize_civitai_ref(
     return MaterializedRef(sync_path=remote_sync, abs_path=remote_abs)
 
 
+async def _materialize_dataset_config(
+    environment: Environment,
+    dataset_config_path: Path,
+    remote_root_sync: str,
+    remote_home: str,
+) -> MaterializedConfig:
+    payload = _load_structured_config(dataset_config_path)
+    rewritten = json.loads(json.dumps(payload))
+    datasets = rewritten.get("datasets")
+    if not isinstance(datasets, list):
+        raise ValueError("dataset_config must include a 'datasets' list")
+
+    for dataset in datasets:
+        if not isinstance(dataset, dict):
+            continue
+        subsets = dataset.get("subsets")
+        if not isinstance(subsets, list):
+            continue
+        for subset in subsets:
+            if not isinstance(subset, dict):
+                continue
+            image_dir_raw = subset.get("image_dir")
+            if isinstance(image_dir_raw, str) and image_dir_raw.strip():
+                image_dir = resolve_path_from_config(image_dir_raw, dataset_config_path)
+                if not image_dir.is_dir():
+                    raise ValueError(f"subset.image_dir is not a directory: {image_dir}")
+                subset["image_dir"] = (
+                    await _upload_local_ref(
+                        environment,
+                        "train_data_dir",
+                        image_dir,
+                        remote_root_sync,
+                        remote_home,
+                    )
+                ).abs_path
+
+            metadata_file_raw = subset.get("metadata_file")
+            if isinstance(metadata_file_raw, str) and metadata_file_raw.strip():
+                metadata_file = resolve_path_from_config(metadata_file_raw, dataset_config_path)
+                if not metadata_file.is_file():
+                    raise ValueError(f"subset.metadata_file is not a file: {metadata_file}")
+                subset["metadata_file"] = (
+                    await _upload_local_ref(
+                        environment,
+                        "in_json",
+                        metadata_file,
+                        remote_root_sync,
+                        remote_home,
+                    )
+                ).abs_path
+
+    rendered = _render_structured_config(dataset_config_path, rewritten)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=dataset_config_path.suffix or ".toml",
+        delete=False,
+        encoding="utf-8",
+    ) as temp:
+        temp.write(rendered)
+        temp_path = Path(temp.name)
+
+    try:
+        remote = await _upload_local_ref(
+            environment,
+            "dataset_config",
+            temp_path,
+            remote_root_sync,
+            remote_home,
+        )
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+    return MaterializedConfig(payload=rewritten, remote=remote)
+
+
 async def _resolve_and_patch_train_toml(
     environment: Environment,
     train_config_path: Path,
@@ -503,9 +603,7 @@ async def _resolve_and_patch_train_toml(
         if not raw_value:
             continue
 
-        candidate = Path(raw_value).expanduser()
-        if not candidate.is_absolute():
-            candidate = (train_config_path.parent / candidate).resolve()
+        candidate = resolve_path_from_config(raw_value, train_config_path)
 
         if candidate.exists():
             mode = expected_local_mode_for_key(key)
@@ -513,6 +611,15 @@ async def _resolve_and_patch_train_toml(
                 raise ValueError(f"'{key}' expects directory: {candidate}")
             if mode == "file" and not candidate.is_file():
                 raise ValueError(f"'{key}' expects file: {candidate}")
+            if key == "dataset_config":
+                materialized_config = await _materialize_dataset_config(
+                    environment,
+                    candidate,
+                    remote_root_sync,
+                    remote_home,
+                )
+                data[key] = materialized_config.remote.abs_path
+                continue
             materialized = await _upload_local_ref(environment, key, candidate, remote_root_sync, remote_home)
             data[key] = materialized.abs_path
             continue
